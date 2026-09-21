@@ -1,0 +1,63 @@
+---
+- name: Base preparation of every node
+  hosts: all
+  gather_facts: true
+  roles:
+    - common
+
+- name: Install k3s server on the control plane
+  hosts: control_plane
+  gather_facts: false
+  roles:
+    - k3s_server
+
+- name: Install and join k3s agents
+  hosts: workers
+  gather_facts: false
+  roles:
+    - k3s_agent
+
+- name: Fetch kubeconfig to the local machine
+  hosts: control_plane
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Ensure local ~/.kube directory exists
+      delegate_to: localhost
+      ansible.builtin.file:
+        path: "{{ kubeconfig_local_path | dirname }}"
+        state: directory
+        mode: "0700"
+
+    - name: Fetch k3s.yaml from the control plane
+      ansible.builtin.fetch:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: "{{ kubeconfig_local_path }}"
+        flat: true
+
+    - name: Point kubeconfig at the public API address
+      delegate_to: localhost
+      ansible.builtin.replace:
+        path: "{{ kubeconfig_local_path }}"
+        regexp: 'https://127\.0\.0\.1:6443'
+        replace: "https://{{ ansible_host }}:{{ k3s_api_port }}"
+
+    - name: Tighten kubeconfig permissions
+      delegate_to: localhost
+      ansible.builtin.file:
+        path: "{{ kubeconfig_local_path }}"
+        mode: "0600"
+
+- name: Verify cluster
+  hosts: control_plane
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Get nodes
+      ansible.builtin.command: /usr/local/bin/k3s kubectl get nodes -o wide
+      register: k3s_nodes
+      changed_when: false
+
+    - name: Show nodes
+      ansible.builtin.debug:
+        var: k3s_nodes.stdout_lines

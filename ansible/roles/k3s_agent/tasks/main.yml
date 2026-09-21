@@ -1,0 +1,31 @@
+---
+- name: Check whether the k3s agent is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: k3s_bin
+
+- name: Install and join the k3s agent
+  ansible.builtin.shell: |
+    set -o pipefail
+    curl -sfL https://get.k3s.io | \
+      INSTALL_K3S_VERSION="{{ k3s_version }}" \
+      K3S_URL="https://{{ hostvars[groups['control_plane'][0]].private_ip }}:{{ k3s_api_port }}" \
+      K3S_TOKEN="{{ hostvars[groups['control_plane'][0]].k3s_node_token }}" \
+      INSTALL_K3S_EXEC="agent \
+        --node-ip={{ private_ip }} \
+        --flannel-iface={{ k3s_flannel_iface }} \
+        {{ k3s_extra_agent_args }}" sh -
+  args:
+    executable: /bin/bash
+  register: k3s_agent_install
+  retries: 3
+  delay: 10
+  until: k3s_agent_install is succeeded
+  when: not k3s_bin.stat.exists
+  no_log: true
+
+- name: Ensure the k3s-agent service is enabled and running
+  ansible.builtin.systemd:
+    name: k3s-agent
+    state: started
+    enabled: true

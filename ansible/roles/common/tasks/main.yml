@@ -1,0 +1,48 @@
+---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Upgrade installed packages
+  ansible.builtin.apt:
+    upgrade: safe
+  register: apt_upgrade
+  retries: 3
+  delay: 5
+  until: apt_upgrade is succeeded
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - curl
+      - ca-certificates
+      - jq
+    state: present
+
+- name: Ensure NTP time synchronization is enabled
+  ansible.builtin.command: timedatectl set-ntp true
+  changed_when: false
+
+- name: Show time sync status
+  ansible.builtin.command: timedatectl
+  register: timedatectl_out
+  changed_when: false
+
+- name: Detect the interface holding the private IP
+  ansible.builtin.shell: |
+    set -o pipefail
+    ip -o -4 addr show | awk -v ip="{{ private_ip }}" '$4 ~ ("^" ip "/") {print $2}' | head -n1
+  args:
+    executable: /bin/bash
+  register: iface_lookup
+  changed_when: false
+
+- name: Fail when the private interface cannot be found
+  ansible.builtin.fail:
+    msg: "No interface carries private IP {{ private_ip }} on {{ inventory_hostname }}"
+  when: iface_lookup.stdout | length == 0
+
+- name: Record the detected private interface
+  ansible.builtin.set_fact:
+    k3s_flannel_iface: "{{ iface_lookup.stdout }}"

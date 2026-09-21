@@ -1,0 +1,32 @@
+# Secrets
+terraform.tfvars
+*.tfvars
+!terraform.tfvars.example
+
+# Terraform state and cache
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Generated Ansible inventory (created by Terraform apply)
+ansible/inventory/hosts.ini
+
+# kubeconfig / tokens
+kubeconfig
+kubeconfig.*
+*.kubeconfig
+node-token
+*.token
+
+# Local overrides
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Editor
+.idea/
+.vscode/
+*.swp
